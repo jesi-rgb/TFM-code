@@ -6,7 +6,7 @@ echo "Unzipping data..."
 # unzip data
 unzip data.zip
 
-echo "Preparing folder structure"
+echo "Preparing folder structure..."
 # generate folder structure
 mkdir trained_models
 mkdir results

@@ -3,14 +3,18 @@ import torch
 import os
 from torch._C import device
 from torch.utils.data import Dataset, DataLoader
-from transformers import GPT2Tokenizer, GPT2LMHeadModel, AdamW, get_linear_schedule_with_warmup
+from transformers import (
+    GPT2Tokenizer,
+    GPT2LMHeadModel,
+    AdamW,
+    get_linear_schedule_with_warmup,
+)
 import torch.nn.functional as F
 from tqdm import tqdm, trange
 import gc
 
 
 class MedTextDataset(Dataset):
-
     def __init__(self, *path_files, gpt2_type="gpt2", max_length=768):
 
         self.tokenizer = GPT2Tokenizer.from_pretrained(gpt2_type)
@@ -83,8 +87,7 @@ def train(
 
         print(f"Epoch {epoch+1}\n-------------------------------")
         for idx, entry in tqdm(enumerate(train_dataloader)):
-            (input_tensor, carry_on, remainder) = pack_tensor(
-                entry, input_tensor, 768)
+            (input_tensor, carry_on, remainder) = pack_tensor(entry, input_tensor, 768)
 
             if carry_on and idx != len(train_dataloader) - 1:
                 continue
@@ -123,7 +126,7 @@ def generate(
     entry_count=10,
     entry_length=100,
     top_p=0.8,
-    temperature=1.,
+    temperature=1.0,
 ):
 
     model.eval()
@@ -146,11 +149,9 @@ def generate(
             for i in range(entry_length):
                 outputs = model(generated, labels=generated)
                 loss, logits = outputs[:2]
-                logits = logits[:, -1, :] / \
-                    (temperature if temperature > 0 else 1.0)
+                logits = logits[:, -1, :] / (temperature if temperature > 0 else 1.0)
 
-                sorted_logits, sorted_indices = torch.sort(
-                    logits, descending=True)
+                sorted_logits, sorted_indices = torch.sort(logits, descending=True)
                 cumulative_probs = torch.cumsum(
                     F.softmax(sorted_logits, dim=-1), dim=-1
                 )
@@ -164,8 +165,7 @@ def generate(
                 indices_to_remove = sorted_indices[sorted_indices_to_remove]
                 logits[:, indices_to_remove] = filter_value
 
-                next_token = torch.multinomial(
-                    F.softmax(logits, dim=-1), num_samples=1)
+                next_token = torch.multinomial(F.softmax(logits, dim=-1), num_samples=1)
                 generated = torch.cat((generated, next_token), dim=1)
 
                 if next_token in tokenizer.encode("<|EOS|>"):
@@ -195,19 +195,16 @@ if __name__ == "__main__":
     torch.cuda.empty_cache()
 
     # declaring variables, model names and paths
-    spaces = '-'*50
-    DATA_FOLDER = 'tagged_files'
+    spaces = "-" * 50
+    DATA_FOLDER = "tagged_files"
     gpt2_type = "gpt2"
 
     print("Starting GPT2 fine-tuning with med-text data.")
-    print("")
 
     files = os.listdir(DATA_FOLDER)
 
     print(f"Loading data from {DATA_FOLDER}")
-    train_p_dataset = MedTextDataset(
-        *[os.path.join(DATA_FOLDER, f) for f in files]
-    )
+    train_p_dataset = MedTextDataset(*[os.path.join(DATA_FOLDER, f) for f in files])
     print(f"Processed {len(train_p_dataset)} sentences.")
 
     print(f"\n{spaces}\n")
@@ -226,7 +223,7 @@ if __name__ == "__main__":
         device=device,
         output_dir="trained_models",
         output_prefix="medtext",
-        save_model_on_epoch=False
+        save_model_on_epoch=False,
     )
 
     print("Training finished.")
@@ -242,10 +239,10 @@ if __name__ == "__main__":
         model.to("cpu"),
         GPT2Tokenizer.from_pretrained(gpt2_type),
         "<|BOS|>",
-        entry_count=n_entries
+        entry_count=n_entries,
     )
 
-    with open('results/generated_comments.txt', 'w') as file:
+    with open("results/generated_comments.txt", "w") as file:
         file.write("\n".join(generated_comments))
 
     print(f"\n\n{spaces}\n\n".join(generated_comments))
