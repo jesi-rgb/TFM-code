@@ -3,3 +3,5 @@
 output
 *.zip
 runs
+trained_models/
+*.pt
