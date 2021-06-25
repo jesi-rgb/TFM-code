@@ -12,6 +12,14 @@ from transformers import (
 import torch.nn.functional as F
 from tqdm import tqdm, trange
 import gc
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s %(message)s",
+    filename="training.log",
+    filemode="w",
+)
 
 
 class MedTextDataset(Dataset):
@@ -21,7 +29,7 @@ class MedTextDataset(Dataset):
         self.comments = []
 
         for path in path_files:
-            print(f"Reading file {path} ...")
+            logging.info(f"Reading file {path} ...")
             with open(path) as file:
                 curr_file = file.readlines()
 
@@ -85,7 +93,7 @@ def train(
 
     for epoch in range(epochs):
 
-        print(f"Epoch {epoch+1}\n-------------------------------")
+        logging.info(f"Epoch {epoch+1}\n-------------------------------")
         for idx, entry in tqdm(enumerate(train_dataloader)):
             (input_tensor, carry_on, remainder) = pack_tensor(entry, input_tensor, 768)
 
@@ -199,20 +207,20 @@ if __name__ == "__main__":
     DATA_FOLDER = "tagged_files"
     gpt2_type = "gpt2"
 
-    print("Starting GPT2 fine-tuning with med-text data.")
+    logging.info("Starting GPT2 fine-tuning with med-text data.")
 
     files = os.listdir(DATA_FOLDER)
 
-    print(f"Loading data from {DATA_FOLDER}")
+    logging.info(f"Loading data from {DATA_FOLDER}")
     train_p_dataset = MedTextDataset(*[os.path.join(DATA_FOLDER, f) for f in files])
-    print(f"Processed {len(train_p_dataset)} sentences.")
+    logging.info(f"Processed {len(train_p_dataset)} sentences.")
 
-    print(f"\n{spaces}\n")
+    logging.info(f"\n{spaces}\n")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {device}")
+    logging.info(f"Using device: {device}")
 
-    print("Starting training...")
+    logging.info("Starting training...")
     model = train(
         train_p_dataset,
         GPT2LMHeadModel.from_pretrained(gpt2_type),
@@ -226,15 +234,15 @@ if __name__ == "__main__":
         save_model_on_epoch=False,
     )
 
-    print("Training finished.")
+    logging.info("Training finished.")
 
-    print()
-    print("*" * 100)
-    print()
+    logging.info()
+    logging.info("*" * 100)
+    logging.info()
 
     n_entries = 10
-    print("Starting generation of comments...")
-    print(f"Generating {n_entries} sentences...")
+    logging.info("Starting generation of comments...")
+    logging.info(f"Generating {n_entries} sentences...")
     generated_comments = generate(
         model.to("cpu"),
         GPT2Tokenizer.from_pretrained(gpt2_type),
@@ -245,5 +253,5 @@ if __name__ == "__main__":
     with open("results/generated_comments.txt", "w") as file:
         file.write("\n".join(generated_comments))
 
-    print(f"\n\n{spaces}\n\n".join(generated_comments))
-    print("Execution finished")
+    logging.info(f"\n\n{spaces}\n\n".join(generated_comments))
+    logging.info("Execution finished")

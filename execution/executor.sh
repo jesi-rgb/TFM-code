@@ -22,6 +22,6 @@ python3 src/gptorch.py
 echo "Finished."
 echo "Zipping back the results..."
 # zip all back
-zip results.zip trained_models results 
+zip -r results.zip trained_models results 
 
 echo "Program finished successfully."
