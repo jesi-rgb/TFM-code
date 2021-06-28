@@ -1,3 +1,6 @@
+from dataclasses import dataclass, field
+from io import StringIO
+from numpy import true_divide
 import streamlit as st
 import torch
 from torch._C import device
@@ -21,6 +24,15 @@ col1, col2 = st.beta_columns((2, 2))
 
 
 ######################################## CODE ##########################################
+
+
+@st.cache
+@dataclass(frozen=True)
+class GeneratedComment:
+    comment_list: list[str] = field(default_factory=list)
+
+    def __getitem__(self, item):
+        return self.comment_list[item]
 
 
 def clamp(n, smallest=0, largest=1):
@@ -128,6 +140,7 @@ def generate(
 ######################################## STREAMLIT APP ##########################################
 
 # GENERATION COLUMN
+
 with col1:
     st.header("GENERAR COMENTARIOS")
     n_comments = st.number_input("Nº de comentarios a generar", 1, 5, 2, 1)
@@ -145,24 +158,91 @@ with col1:
         progress = st.progress(0)
         progress_text = st.empty()
 
-        generated_comments = generate(
-            model.to("cpu"),
-            tokenizer,
-            "<|BOS|>",
-            entry_count=n_comments,
-            progress_bar=progress,
-            progress_text=progress_text,
+        generated_comments = GeneratedComment(
+            generate(
+                model.to("cpu"),
+                tokenizer,
+                "<|BOS|>",
+                entry_count=n_comments,
+                progress_bar=progress,
+                progress_text=progress_text,
+            )
         )
 
         progress.empty()
         progress_text.empty()
         coms.empty()
 
-        st.write(
-            [l.removeprefix("<|BOS|>").rstrip("<|EOS|>\n") for l in generated_comments]
-        )
+        generated_comments = [
+            l.removeprefix("<|BOS|>").rstrip("<|EOS|>\n") for l in generated_comments
+        ]
+
+        for c in generated_comments:
+            st.markdown(c)
+            st.markdown("---")
 
 
 # EVALUATION COLUMN
 with col2:
     st.header("EVALUAR COMENTARIOS")
+
+    import spacy
+
+    med7 = spacy.load("en_core_med7_trf")
+
+    # configure the entities parser colours
+    col_dict = {}
+    seven_colours = [
+        "#e6194B",
+        "#3cb44b",
+        "#ffe119",
+        "#ffd8b1",
+        "#f58231",
+        "#f032e6",
+        "#42d4f4",
+    ]
+
+    for label, colour in zip(med7.pipe_labels["ner"], seven_colours):
+        col_dict[label] = colour
+
+    html_format_options = {"ents": med7.pipe_labels["ner"], "colors": col_dict}
+
+    source_comment_choice = st.radio(
+        "Elige de dónde cargar los comentarios",
+        ["Desde archivo", "Escribir"],
+        index=1,
+    )
+
+    text = None
+    if source_comment_choice == "Desde archivo":
+        st.warning(
+            "Sube un archivo de texto con tus comentarios aquí. Debe ser un .txt o .dat. \nSe espera que haya un comentario por línea."
+        )
+        uploaded_file = st.file_uploader("", type=["txt", "dat"])
+        stringio = StringIO(uploaded_file.getvalue().decode("utf-8"))
+        text = stringio.readlines()
+
+    elif source_comment_choice == "Escribir":
+        st.subheader(
+            "Puedes escribir tus comentarios aquí. Escribe un solo comentario por línea."
+        )
+        text = st.text_area("Escribe aquí tus comentarios.").split("\n")
+
+    if st.button("Analizar comentarios"):
+        if len(text) == 1:
+            doc = med7(text[0])
+
+            styled_html = spacy.displacy.render(
+                doc, style="ent", options=html_format_options
+            )
+            st.markdown(styled_html, unsafe_allow_html=True)
+        else:
+            docs = list(med7.pipe(text))
+            doc_renders = [
+                spacy.displacy.render(doc, style="ent", options=html_format_options)
+                for doc in docs
+            ]
+
+            for doc in doc_renders:
+                st.markdown(doc, unsafe_allow_html=True)
+                st.markdown("---")
