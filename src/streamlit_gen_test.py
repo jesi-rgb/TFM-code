@@ -31,6 +31,8 @@ def normalize(n, n_min=0, n_max=1):
     return (n - n_min) / (n_max - n_min)
 
 
+# TODO: cachear el modelo y tokenizador para evitar cargarlos mucho.
+@st.cache(allow_output_mutation=True)
 def load_model():
     model = GPT2LMHeadModel.from_pretrained("gpt2")
     model.load_state_dict(
