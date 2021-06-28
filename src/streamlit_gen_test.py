@@ -1,15 +1,13 @@
 from dataclasses import dataclass, field
 from io import StringIO
-from numpy import true_divide
 import streamlit as st
 import torch
-from torch._C import device
 from transformers import (
     GPT2Tokenizer,
     GPT2LMHeadModel,
 )
 import torch.nn.functional as F
-from tqdm import tqdm, trange
+import spacy
 
 
 st.set_page_config(
@@ -19,10 +17,13 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+
 st.title("MEDTEXT NLP")
 col1, col2 = st.beta_columns((2, 2))
 
-
+warn = st.warning("Loading models and libraries...")
+med7 = spacy.load("en_core_med7_trf")
+warn.empty()
 ######################################## CODE ##########################################
 
 
@@ -35,15 +36,10 @@ class GeneratedComment:
         return self.comment_list[item]
 
 
-def clamp(n, smallest=0, largest=1):
-    return max(smallest, min(n, largest))
-
-
 def normalize(n, n_min=0, n_max=1):
     return (n - n_min) / (n_max - n_min)
 
 
-# TODO: cachear el modelo y tokenizador para evitar cargarlos mucho.
 @st.cache(allow_output_mutation=True)
 def load_model():
     model = GPT2LMHeadModel.from_pretrained("gpt2")
@@ -177,6 +173,7 @@ with col1:
             l.removeprefix("<|BOS|>").rstrip("<|EOS|>\n") for l in generated_comments
         ]
 
+        st.markdown("---")
         for c in generated_comments:
             st.markdown(c)
             st.markdown("---")
@@ -185,10 +182,6 @@ with col1:
 # EVALUATION COLUMN
 with col2:
     st.header("EVALUAR COMENTARIOS")
-
-    import spacy
-
-    med7 = spacy.load("en_core_med7_trf")
 
     # configure the entities parser colours
     col_dict = {}
@@ -209,24 +202,29 @@ with col2:
 
     source_comment_choice = st.radio(
         "Elige de dónde cargar los comentarios",
-        ["Desde archivo", "Escribir"],
-        index=1,
+        ["Generados", "Desde archivo", "Escribir"],
+        index=0,
     )
 
     text = None
-    if source_comment_choice == "Desde archivo":
+    if source_comment_choice == "Generados":
+        text = generated_comments
+        pass
+
+    elif source_comment_choice == "Desde archivo":
         st.warning(
-            "Sube un archivo de texto con tus comentarios aquí. Debe ser un .txt o .dat. \nSe espera que haya un comentario por línea."
+            "Sube un archivo de texto con tus comentarios aquí. Debe ser un .txt o .dat. Se espera que haya un comentario por línea."
         )
         uploaded_file = st.file_uploader("", type=["txt", "dat"])
-        stringio = StringIO(uploaded_file.getvalue().decode("utf-8"))
-        text = stringio.readlines()
+        if uploaded_file is not None:
+            stringio = StringIO(uploaded_file.getvalue().decode("utf-8"))
+            text = stringio.readlines()
 
     elif source_comment_choice == "Escribir":
         st.subheader(
             "Puedes escribir tus comentarios aquí. Escribe un solo comentario por línea."
         )
-        text = st.text_area("Escribe aquí tus comentarios.").split("\n")
+        text = st.text_area("Escribe aquí tus comentarios.", height=200).split("\n")
 
     if st.button("Analizar comentarios"):
         if len(text) == 1:
