@@ -132,6 +132,11 @@ def load_ner_tagger(tagger):
     return spacy.load(tagger)
 
 
+@st.cache(allow_output_mutation=True)
+def load_comment(text):
+    return text
+
+
 def b_or_w_font(hex_value):
     color = Color(f"#{hex_value}")
 
@@ -238,6 +243,41 @@ def generate(
     return generated_list
 
 
+def display_analysis(text, doc, col_dict):
+    with st.beta_expander("Mostrar más datos", expanded=True):
+        st.write("### Algunas gráficas y estadísticas de los comentarios...")
+
+        num_tokens = len(text.split(" "))
+        num_chars = len(text)
+
+        st.markdown("# Tamaño de nuestro comentario:")
+
+        st.markdown(f"\t### {num_tokens} tokens")
+        st.markdown(f"\t### {num_chars} caracteres")
+
+        st.markdown("---")
+
+        text_data = [(ent.text, ent.label_) for ent in doc.ents]
+        counter = Counter([t[1] for t in text_data])
+
+        if len(counter.items()) > 0:
+            st.markdown("# Se encontraron las siguientes etiquetas...")
+            for k, v in counter.items():
+                st.markdown(f"### {v} {k}")
+
+            if len(counter.items()) > 1:
+                df = pd.DataFrame(counter.items(), columns=["Tag", "Count"])
+
+                fig = plt.figure(figsize=(10, 5))
+                plt.barh(df.Tag, df.Count, color=[col_dict[tag] for tag in df.Tag])
+                st.pyplot(fig)
+        else:
+            st.markdown("## El modelo no encontró ninguna etiqueta.")
+            st.markdown(
+                "#### Puedes probar a cambiar el modelo arriba, ofrecerá otros resultados."
+            )
+
+
 ######################################## PAGE DEFINITION ##########################################
 
 # GENERATION COLUMN
@@ -336,10 +376,10 @@ def comment_evaluation(state):
         index=0,
     )
 
-    text = None
+    texts = None
     if source_comment_choice == "Generados":
         if state.generated_comments is not None:
-            text = state.generated_comments
+            texts = state.generated_comments
         else:
             st.warning("Debes generar comentarios primero!")
 
@@ -350,68 +390,38 @@ def comment_evaluation(state):
         uploaded_file = st.file_uploader("", type=["txt", "dat"])
         if uploaded_file is not None:
             stringio = StringIO(uploaded_file.getvalue().decode("utf-8"))
-            text = stringio.readlines()
+            texts = stringio.readlines()
 
     elif source_comment_choice == "Escribir":
         st.subheader(
             "Puedes escribir tus comentarios aquí. Escribe un solo comentario por línea."
         )
-        text = st.text_area("Escribe aquí tus comentarios.", height=200).split("\n")
+        texts = st.text_area("Escribe aquí tus comentarios.", height=200).split("\n")
 
-    if st.button("Analizar comentarios"):
-        if text is None:
-            pass
+    if texts is None:
+        pass
 
-        elif len(text) == 1:
-            doc = ner_tagger(text[0])
+    elif len(texts) == 1:
+        state.text = texts[0]
 
-            styled_html = spacy.displacy.render(
-                doc, style="ent", options=html_format_options
-            )
+    else:
+        state.text_idx = st.selectbox(
+            "Elige el comentario a analizar", options=list(range(len(texts)))
+        )
 
-            styled_html = check_colors_html(styled_html)
+    state.text = load_comment(texts[state.text_idx])
 
-            st.markdown(styled_html, unsafe_allow_html=True)
+    doc = ner_tagger(state.text)
 
-            with st.beta_expander("Mostrar más datos", expanded=True):
-                st.write("### Algunas gráficas y estadísticas de los comentarios...")
+    styled_html = spacy.displacy.render(doc, style="ent", options=html_format_options)
 
-                num_tokens = len(text[0].split(" "))
-                num_chars = len(text[0])
+    styled_html = check_colors_html(styled_html)
 
-                st.markdown("# Tamaño de nuestro comentario:")
+    st.markdown(styled_html, unsafe_allow_html=True)
 
-                st.markdown(f"\t### {num_tokens} tokens")
-                st.markdown(f"\t### {num_chars} caracteres")
+    st.markdown("---")
 
-                st.markdown("---")
-
-                text_data = [(ent.text, ent.label_) for ent in doc.ents]
-                counter = Counter([t[1] for t in text_data])
-
-                st.markdown("# Se encontraron las siguientes etiquetas...")
-                for k, v in counter.items():
-                    st.markdown(f"### {v} {k}")
-
-                if len(counter.items()) > 1:
-                    df = pd.DataFrame(counter.items(), columns=["Tag", "Count"])
-
-                    fig = plt.figure(figsize=(10, 5))
-                    plt.barh(df.Tag, df.Count, color=[col_dict[tag] for tag in df.Tag])
-                    st.pyplot(fig)
-
-        else:
-            docs = list(ner_tagger.pipe(text))
-            doc_renders = [
-                spacy.displacy.render(doc, style="ent", options=html_format_options)
-                for doc in docs
-            ]
-
-            styled_renders = [check_colors_html(render) for render in doc_renders]
-
-            for doc in styled_renders:
-                st.markdown(doc, unsafe_allow_html=True)
-                st.markdown("---")
+    display_analysis(state.text, doc, col_dict)
 
 
 def _get_session():
