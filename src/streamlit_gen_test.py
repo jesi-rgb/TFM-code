@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+import re
 from io import StringIO
 import streamlit as st
 import torch
@@ -12,6 +13,7 @@ import spacy
 from streamlit.report_thread import get_report_ctx
 from streamlit.server.server import Server
 from streamlit.hashing import _CodeHasher
+from colour import Color
 
 
 ######################################## INITIAL CONFIG ##########################################
@@ -24,7 +26,7 @@ st.set_page_config(
 
 
 st.title("MEDTEXT NLP")
-col1, col2 = st.beta_columns((2, 2))
+col1, col2 = st.beta_columns((1, 1))
 
 ######################################## FUNCTIONS AND CLASSES ##########################################
 class _SessionState:
@@ -112,6 +114,32 @@ def load_model():
 @st.cache(allow_output_mutation=True)
 def load_med7():
     return spacy.load("en_core_med7_trf")
+
+
+@st.cache(allow_output_mutation=True)
+def load_en_ner_bionlp13cg_md():
+    return spacy.load("en_ner_bionlp13cg_md")
+
+
+def b_or_w_font(hex_value):
+    color = Color(f"#{hex_value}")
+
+    print(color.get_luminance())
+    if color.get_luminance() > 0.40:
+        value = "#000000"
+    else:
+        value = "#ffffff"
+    return value
+
+
+def check_colors_html(styled_html):
+    color_list = re.findall(r"(?<=background: #)\w+", styled_html)
+    text_color_list = [b_or_w_font(c) for c in color_list]
+
+    for c, t in zip(color_list, text_color_list):
+        styled_html = re.sub(f"#{c};", f"#{c}; color: {t};", styled_html)
+
+    return styled_html
 
 
 def generate(
@@ -253,7 +281,14 @@ def comment_generation(state):
 def comment_evaluation(state):
     st.header("EVALUAR COMENTARIOS")
 
-    med7 = load_med7()
+    selection = st.selectbox(
+        "Elige el modelo a utilizar:", ["med7", "en_ner_bionlp13cg_md"], 1
+    )
+
+    if selection == "med7":
+        ner_tagger = load_med7()
+    else:
+        ner_tagger = load_en_ner_bionlp13cg_md()
 
     # configure the entities parser colours
     col_dict = {}
@@ -265,12 +300,22 @@ def comment_evaluation(state):
         "#f58231",
         "#f032e6",
         "#42d4f4",
+        "#ff0000",
+        "#ff8700",
+        "#ffd300",
+        "#deff0a",
+        "#a1ff0a",
+        "#0aff99",
+        "#0aefff",
+        "#147df5",
+        "#580aff",
+        "#be0aff",
     ]
 
-    for label, colour in zip(med7.pipe_labels["ner"], seven_colours):
+    for label, colour in zip(ner_tagger.pipe_labels["ner"], seven_colours):
         col_dict[label] = colour
 
-    html_format_options = {"ents": med7.pipe_labels["ner"], "colors": col_dict}
+    html_format_options = {"ents": ner_tagger.pipe_labels["ner"], "colors": col_dict}
 
     source_comment_choice = st.radio(
         "Elige de dónde cargar los comentarios",
@@ -301,21 +346,30 @@ def comment_evaluation(state):
         text = st.text_area("Escribe aquí tus comentarios.", height=200).split("\n")
 
     if st.button("Analizar comentarios"):
-        if len(text) == 1:
-            doc = med7(text[0])
+        if text is None:
+            pass
+
+        elif len(text) == 1:
+            doc = ner_tagger(text[0])
 
             styled_html = spacy.displacy.render(
                 doc, style="ent", options=html_format_options
             )
+
+            styled_html = check_colors_html(styled_html)
+
             st.markdown(styled_html, unsafe_allow_html=True)
+
         else:
-            docs = list(med7.pipe(text))
+            docs = list(ner_tagger.pipe(text))
             doc_renders = [
                 spacy.displacy.render(doc, style="ent", options=html_format_options)
                 for doc in docs
             ]
 
-            for doc in doc_renders:
+            styled_renders = [check_colors_html(render) for render in doc_renders]
+
+            for doc in styled_renders:
                 st.markdown(doc, unsafe_allow_html=True)
                 st.markdown("---")
 
