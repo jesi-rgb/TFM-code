@@ -415,7 +415,9 @@ def comment_evaluation(state):
 
         doc = ner_tagger(state.text)
 
-        styled_html = spacy.displacy.render(doc, style="ent", options=html_format_options)
+        styled_html = spacy.displacy.render(
+            doc, style="ent", options=html_format_options
+        )
 
         styled_html = check_colors_html(styled_html)
 
