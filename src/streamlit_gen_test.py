@@ -26,7 +26,7 @@ st.set_page_config(
 
 
 st.title("MEDTEXT NLP")
-col1, col2 = st.beta_columns((1, 1))
+col1, col2 = st.beta_columns((1, 3))
 
 ######################################## FUNCTIONS AND CLASSES ##########################################
 class _SessionState:
@@ -100,7 +100,7 @@ def normalize(n, n_min=0, n_max=1):
     return (n - n_min) / (n_max - n_min)
 
 
-@st.cache(allow_output_mutation=True)
+@st.cache(allow_output_mutation=True, show_spinner=False)
 def load_model():
     model = GPT2LMHeadModel.from_pretrained("gpt2")
     model.load_state_dict(
@@ -111,21 +111,15 @@ def load_model():
     return model, tokenizer
 
 
-@st.cache(allow_output_mutation=True)
-def load_med7():
-    return spacy.load("en_core_med7_trf")
-
-
-@st.cache(allow_output_mutation=True)
-def load_en_ner_bionlp13cg_md():
-    return spacy.load("en_ner_bionlp13cg_md")
+@st.cache(allow_output_mutation=True, show_spinner=False)
+def load_ner_tagger(tagger):
+    return spacy.load(tagger)
 
 
 def b_or_w_font(hex_value):
     color = Color(f"#{hex_value}")
 
-    print(color.get_luminance())
-    if color.get_luminance() > 0.40:
+    if color.get_luminance() > 0.55:
         value = "#000000"
     else:
         value = "#ffffff"
@@ -282,13 +276,12 @@ def comment_evaluation(state):
     st.header("EVALUAR COMENTARIOS")
 
     selection = st.selectbox(
-        "Elige el modelo a utilizar:", ["med7", "en_ner_bionlp13cg_md"], 1
+        "Elige el modelo a utilizar:",
+        ["med7", "en_ner_bionlp13cg_md", "en_ner_bc5cdr_md"],
+        1,
     )
 
-    if selection == "med7":
-        ner_tagger = load_med7()
-    else:
-        ner_tagger = load_en_ner_bionlp13cg_md()
+    ner_tagger = load_ner_tagger(selection)
 
     # configure the entities parser colours
     col_dict = {}
