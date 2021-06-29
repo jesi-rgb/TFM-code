@@ -33,8 +33,8 @@ params = {
     "figure.figsize": (20, 10),
     "axes.labelsize": 25,
     "axes.titlesize": 25,
-    "xtick.labelsize": size,
-    "ytick.labelsize": size,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
     "axes.titlepad": 25,
 }
 plt.rcParams["font.sans-serif"] = ["Avenir", "sans-serif"]
