@@ -9,7 +9,12 @@ from transformers import (
 import torch.nn.functional as F
 import spacy
 
+from streamlit.report_thread import get_report_ctx
+from streamlit.server.server import Server
+from streamlit.hashing import _CodeHasher
 
+
+######################################## INITIAL CONFIG ##########################################
 st.set_page_config(
     page_title="MEDTEXT NLP",
     page_icon="💭",
@@ -21,10 +26,63 @@ st.set_page_config(
 st.title("MEDTEXT NLP")
 col1, col2 = st.beta_columns((2, 2))
 
-warn = st.warning("Loading models and libraries...")
-med7 = spacy.load("en_core_med7_trf")
-warn.empty()
-######################################## CODE ##########################################
+######################################## FUNCTIONS AND CLASSES ##########################################
+class _SessionState:
+    def __init__(self, session, hash_funcs):
+        """Initialize SessionState instance."""
+        self.__dict__["_state"] = {
+            "data": {},
+            "hash": None,
+            "hasher": _CodeHasher(hash_funcs),
+            "is_rerun": False,
+            "session": session,
+        }
+
+    def __call__(self, **kwargs):
+        """Initialize state data once."""
+        for item, value in kwargs.items():
+            if item not in self._state["data"]:
+                self._state["data"][item] = value
+
+    def __getitem__(self, item):
+        """Return a saved state value, None if item is undefined."""
+        return self._state["data"].get(item, None)
+
+    def __getattr__(self, item):
+        """Return a saved state value, None if item is undefined."""
+        return self._state["data"].get(item, None)
+
+    def __setitem__(self, item, value):
+        """Set state value."""
+        self._state["data"][item] = value
+
+    def __setattr__(self, item, value):
+        """Set state value."""
+        self._state["data"][item] = value
+
+    def clear(self):
+        """Clear session state and request a rerun."""
+        self._state["data"].clear()
+        self._state["session"].request_rerun()
+
+    def sync(self):
+        """Rerun the app with all state values up to date from the beginning to fix rollbacks."""
+
+        # Ensure to rerun only once to avoid infinite loops
+        # caused by a constantly changing state value at each run.
+        #
+        # Example: state.value += 1
+        if self._state["is_rerun"]:
+            self._state["is_rerun"] = False
+
+        elif self._state["hash"] is not None:
+            if self._state["hash"] != self._state["hasher"].to_bytes(
+                self._state["data"], None
+            ):
+                self._state["is_rerun"] = True
+                self._state["session"].request_rerun()
+
+        self._state["hash"] = self._state["hasher"].to_bytes(self._state["data"], None)
 
 
 @st.cache
@@ -49,6 +107,11 @@ def load_model():
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
     return model, tokenizer
+
+
+@st.cache(allow_output_mutation=True)
+def load_med7():
+    return spacy.load("en_core_med7_trf")
 
 
 def generate(
@@ -133,11 +196,12 @@ def generate(
     return generated_list
 
 
-######################################## STREAMLIT APP ##########################################
+######################################## PAGE DEFINITION ##########################################
 
 # GENERATION COLUMN
 
-with col1:
+
+def comment_generation(state):
     st.header("GENERAR COMENTARIOS")
     n_comments = st.number_input("Nº de comentarios a generar", 1, 5, 2, 1)
 
@@ -173,15 +237,23 @@ with col1:
             l.removeprefix("<|BOS|>").rstrip("<|EOS|>\n") for l in generated_comments
         ]
 
+        state.generated_comments = generated_comments
+
+    if state.generated_comments is not None:
         st.markdown("---")
-        for c in generated_comments:
+        for c in state.generated_comments:
             st.markdown(c)
             st.markdown("---")
 
+        if st.button("Borrar comentarios"):
+            state.clear()
+
 
 # EVALUATION COLUMN
-with col2:
+def comment_evaluation(state):
     st.header("EVALUAR COMENTARIOS")
+
+    med7 = load_med7()
 
     # configure the entities parser colours
     col_dict = {}
@@ -208,8 +280,10 @@ with col2:
 
     text = None
     if source_comment_choice == "Generados":
-        text = generated_comments
-        pass
+        if state.generated_comments is not None:
+            text = state.generated_comments
+        else:
+            st.warning("Debes generar comentarios primero!")
 
     elif source_comment_choice == "Desde archivo":
         st.warning(
@@ -244,3 +318,44 @@ with col2:
             for doc in doc_renders:
                 st.markdown(doc, unsafe_allow_html=True)
                 st.markdown("---")
+
+
+def _get_session():
+    session_id = get_report_ctx().session_id
+    session_info = Server.get_current()._get_session_info(session_id)
+
+    if session_info is None:
+        raise RuntimeError("Couldn't get your Streamlit Session object.")
+
+    return session_info.session
+
+
+def _get_state(hash_funcs=None):
+    session = _get_session()
+
+    if not hasattr(session, "_custom_session_state"):
+        session._custom_session_state = _SessionState(session, hash_funcs)
+
+    return session._custom_session_state
+
+
+def main():
+    state = _get_state()
+    pages = {
+        "Generation": comment_generation,
+        "Evaluation": comment_evaluation,
+    }
+
+    # Display the selected page with the session state
+    with col1:
+        pages["Generation"](state)
+
+    with col2:
+        pages["Evaluation"](state)
+
+    # Mandatory to avoid rollbacks with widgets, must be called at the end of your app
+    state.sync()
+
+
+if __name__ == "__main__":
+    main()
