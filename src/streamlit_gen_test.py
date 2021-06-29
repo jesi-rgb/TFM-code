@@ -401,27 +401,29 @@ def comment_evaluation(state):
     if texts is None:
         pass
 
-    elif len(texts) == 1:
-        state.text_idx = 0
-
     else:
-        state.text_idx = st.selectbox(
-            "Elige el comentario a analizar", options=list(range(len(texts)))
-        )
 
-    state.text = load_comment(texts[state.text_idx])
+        if len(texts) == 1:
+            state.text_idx = 0
 
-    doc = ner_tagger(state.text)
+        else:
+            state.text_idx = st.selectbox(
+                "Elige el comentario a analizar", options=list(range(len(texts)))
+            )
 
-    styled_html = spacy.displacy.render(doc, style="ent", options=html_format_options)
+        state.text = load_comment(texts[state.text_idx])
 
-    styled_html = check_colors_html(styled_html)
+        doc = ner_tagger(state.text)
 
-    st.markdown(styled_html, unsafe_allow_html=True)
+        styled_html = spacy.displacy.render(doc, style="ent", options=html_format_options)
 
-    st.markdown("---")
+        styled_html = check_colors_html(styled_html)
 
-    display_analysis(state.text, doc, col_dict)
+        st.markdown(styled_html, unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        display_analysis(state.text, doc, col_dict)
 
 
 def _get_session():
