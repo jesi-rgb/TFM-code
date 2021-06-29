@@ -402,7 +402,7 @@ def comment_evaluation(state):
         pass
 
     elif len(texts) == 1:
-        state.text = texts[0]
+        state.text_idx = 0
 
     else:
         state.text_idx = st.selectbox(
