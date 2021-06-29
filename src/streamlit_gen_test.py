@@ -1,20 +1,23 @@
 from dataclasses import dataclass, field
-import re
 from io import StringIO
-import streamlit as st
-import torch
-from transformers import (
-    GPT2Tokenizer,
-    GPT2LMHeadModel,
-)
-import torch.nn.functional as F
-import spacy
+from collections import Counter
 
-from streamlit.report_thread import get_report_ctx
-from streamlit.server.server import Server
-from streamlit.hashing import _CodeHasher
+import re
+import altair as alt
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 from colour import Color
 
+import spacy
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
+
+import torch
+import torch.nn.functional as F
+import streamlit as st
+from streamlit.hashing import _CodeHasher
+from streamlit.report_thread import get_report_ctx
+from streamlit.server.server import Server
 
 ######################################## INITIAL CONFIG ##########################################
 st.set_page_config(
@@ -23,6 +26,19 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+size = 15
+params = {
+    "legend.fontsize": "large",
+    "figure.figsize": (20, 10),
+    "axes.labelsize": 25,
+    "axes.titlesize": 25,
+    "xtick.labelsize": size,
+    "ytick.labelsize": size,
+    "axes.titlepad": 25,
+}
+plt.rcParams["font.sans-serif"] = ["Avenir", "sans-serif"]
+plt.rcParams.update(params)
 
 
 st.title("MEDTEXT NLP")
@@ -119,7 +135,7 @@ def load_ner_tagger(tagger):
 def b_or_w_font(hex_value):
     color = Color(f"#{hex_value}")
 
-    if color.get_luminance() > 0.55:
+    if color.get_luminance() > 0.45:
         value = "#000000"
     else:
         value = "#ffffff"
@@ -134,6 +150,10 @@ def check_colors_html(styled_html):
         styled_html = re.sub(f"#{c};", f"#{c}; color: {t};", styled_html)
 
     return styled_html
+
+
+def justify_text(text):
+    return f'<div style="text-align: justify"> {text} </div>'
 
 
 def generate(
@@ -264,7 +284,7 @@ def comment_generation(state):
     if state.generated_comments is not None:
         st.markdown("---")
         for c in state.generated_comments:
-            st.markdown(c)
+            st.markdown(justify_text(c), unsafe_allow_html=True)
             st.markdown("---")
 
         if st.button("Borrar comentarios"):
@@ -277,7 +297,7 @@ def comment_evaluation(state):
 
     selection = st.selectbox(
         "Elige el modelo a utilizar:",
-        ["med7", "en_ner_bionlp13cg_md", "en_ner_bc5cdr_md"],
+        ["en_core_med7_trf", "en_ner_bionlp13cg_md", "en_ner_bc5cdr_md"],
         1,
     )
 
@@ -352,6 +372,33 @@ def comment_evaluation(state):
             styled_html = check_colors_html(styled_html)
 
             st.markdown(styled_html, unsafe_allow_html=True)
+
+            with st.beta_expander("Mostrar más datos", expanded=True):
+                st.write("### Algunas gráficas y estadísticas de los comentarios...")
+
+                num_tokens = len(text[0].split(" "))
+                num_chars = len(text[0])
+
+                st.markdown("# Tamaño de nuestro comentario:")
+
+                st.markdown(f"\t### {num_tokens} tokens")
+                st.markdown(f"\t### {num_chars} caracteres")
+
+                st.markdown("---")
+
+                text_data = [(ent.text, ent.label_) for ent in doc.ents]
+                counter = Counter([t[1] for t in text_data])
+
+                st.markdown("# Se encontraron las siguientes etiquetas...")
+                for k, v in counter.items():
+                    st.markdown(f"### {v} {k}")
+
+                if len(counter.items()) > 1:
+                    df = pd.DataFrame(counter.items(), columns=["Tag", "Count"])
+
+                    fig = plt.figure(figsize=(10, 5))
+                    plt.barh(df.Tag, df.Count, color=[col_dict[tag] for tag in df.Tag])
+                    st.pyplot(fig)
 
         else:
             docs = list(ner_tagger.pipe(text))
